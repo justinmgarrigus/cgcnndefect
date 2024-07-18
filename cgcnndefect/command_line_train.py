@@ -89,6 +89,13 @@ parser.add_argument('--n-h', default=1, type=int, metavar='N',
                     help='number of hidden layers after pooling')
 parser.add_argument("--seed", default=0,type=int,
                     help='pytorch seed')
+parser.add_argument('--cross-validation', default = None, type = str, metavar = 'N', 
+                    help = 'type of cross validation to be used')
+parser.add_argument('--cross-param', default = None, type = int, metavar = 'N',
+                    help = 'a parameter for certain types of cross validation')
+parser.add_argument('--counter', default = 0, type = int, metavar = 'N',
+                    help = 'the particular iteration of the cross validation method')
+
 
 
 # New CL options added by MW
@@ -147,6 +154,9 @@ def main():
                       njmax = args.njmax,           # MW: max nbrs for sph_harm
                       init_embed_file = args.init_embed_file) # MW: choosing specific file for initial atom embed
     collate_fn = collate_pool
+    returntestvariable = True
+    if (args.cross_validation == 'k-fold' or args.cross_validation == 'k-fold-cross-validation' or args.cross_validation == 'bootstrapping' or args.cross_validation == 'bootstrap' or args.cross_validation == 'leave-p-out' or args.cross_validation == 'leave-one-out'):
+        returntestvariable = False
     train_loader, val_loader, test_loader = get_train_val_test_loader(
         dataset=dataset,
         collate_fn=collate_fn,
@@ -159,7 +169,10 @@ def main():
         train_size=args.train_size,
         val_size=args.val_size,
         test_size=args.test_size,
-        return_test=True)
+        return_test=returntestvariable,
+        cross_validation = args.cross_validation,
+        cross_param = args.cross_param,
+        counter = args.counter)
 
     # obtain target value normalizer
     if args.task == 'classification':

@@ -17,12 +17,49 @@ from torch.utils.data.dataloader import default_collate
 from torch.utils.data.sampler import SubsetRandomSampler
 from .util import ELEM_DICT
 from .model_sph_harmonics import get_harmonics_fea
+import math
 
+def splitValidation(n, typeVal, parameter, counter):
+    ret = []
+    if typeVal == 0: #k fold cross validation, second parameter is k
+        full = list(range(0, n))
+        random.shuffle(full)
+        for i in range(parameter):
+            test = full[(int) (i*n/parameter): (int) ((i+1) * n/parameter)]
+            train = full[0: (int) (i*n/parameter)] + full[(int) ((i+1)*n/parameter): n]
+            ret.append({"train": train, "val": test})    
+            
+    elif typeVal == 1: #bootstrapping, parameter is number of times
+        for i in range(parameter):
+            valSet = set()
+            for j in range((int) (n*3/10)): #test will be approx 30% (but will be replacement)
+                valSet.add(random.randrange(0, n))
+            full = list(range(0, n))
+            train = [i for i in full if i not in valSet]
+            ret.append({"train": train, "val": list(valSet)})
+
+    elif typeVal == 2: #leave p out, second parameter is ‘p’
+        combos = list(itertools.combinations(range(n), parameter))
+        for indices in combos:
+            train = [i for i in range(n) if i not in indices]
+            ret.append({"train": train, "val": list(indices)})
+    elif typeVal == 3: #leave one out
+        for i in range(n):
+            ret.append({"train": [x for x in range(0, n) if x != i], "val": [i]})
+    elif typeVal == 4: #monte carlo, second parameter is the number of times we are doing monte carlo
+        for i in range(parameter):
+            full = list(range(0, n))
+            random.shuffle(full)
+            train = full[0: (int) (n*7/10)]
+            val = full[(int) (n*7/10): (int) (n*8.5/10)]
+            test = full[(int) (n*8.5/10): n]
+            ret.append({"train": train, "val": val, "test": test})
+    return ret[counter]
 
 def get_train_val_test_loader(dataset, collate_fn=default_collate,
                               batch_size=64, train_ratio=None,
                               val_ratio=0.1, test_ratio=0.1, return_test=False,
-                              num_workers=1, pin_memory=False, **kwargs):
+                              num_workers=1, pin_memory=False, cross_validation = None, cross_param = 0, counter = 0, **kwargs):
     """
     Utility function for dividing a dataset to train, val, test datasets.
 
@@ -57,32 +94,53 @@ def get_train_val_test_loader(dataset, collate_fn=default_collate,
     #torch.set_num_threads(1)
     #torch.multiprocessing.set_sharing_strategy('file_system')
     total_size = len(dataset)
-    if train_ratio is None:
-        assert val_ratio + test_ratio < 1
-        train_ratio = 1 - val_ratio - test_ratio
-        print('[Warning] train_ratio is None, using all training data.')
+    train_sampler = None
+    val_sampler = None
+    test_sampler = None
+    if cross_validation == None:
+        if train_ratio is None:
+            assert val_ratio + test_ratio < 1
+            train_ratio = 1 - val_ratio - test_ratio
+            print('[Warning] train_ratio is None, using all training data.')
+        else:
+            assert train_ratio + val_ratio + test_ratio <= 1
+        indices = list(range(total_size))
+        if kwargs['train_size']:
+            train_size = kwargs['train_size']
+        else:
+            train_size = int(train_ratio * total_size)
+        if kwargs['test_size']:
+            test_size = kwargs['test_size']
+        else:
+            test_size = int(test_ratio * total_size)
+        if kwargs['val_size']:
+            valid_size = kwargs['val_size']
+        else:
+            valid_size = int(val_ratio * total_size)
+        print("Final train/val/test sizes are: %d / %d / %d"%(train_size,valid_size,
+                                                            test_size))
+        train_sampler = SubsetRandomSampler(indices[:train_size])
+        val_sampler = SubsetRandomSampler(
+            indices[-(valid_size + test_size):-test_size])
+        if return_test:
+            test_sampler = SubsetRandomSampler(indices[-test_size:])
     else:
-        assert train_ratio + val_ratio + test_ratio <= 1
-    indices = list(range(total_size))
-    if kwargs['train_size']:
-        train_size = kwargs['train_size']
-    else:
-        train_size = int(train_ratio * total_size)
-    if kwargs['test_size']:
-        test_size = kwargs['test_size']
-    else:
-        test_size = int(test_ratio * total_size)
-    if kwargs['val_size']:
-        valid_size = kwargs['val_size']
-    else:
-        valid_size = int(val_ratio * total_size)
-    print("Final train/val/test sizes are: %d / %d / %d"%(train_size,valid_size,
-                                                          test_size))
-    train_sampler = SubsetRandomSampler(indices[:train_size])
-    val_sampler = SubsetRandomSampler(
-        indices[-(valid_size + test_size):-test_size])
-    if return_test:
-        test_sampler = SubsetRandomSampler(indices[-test_size:])
+        cross_num = 0
+        if cross_validation == 'k-fold' or cross_validation == 'k-fold-cross-validation':
+            cross_num = 0
+        elif cross_validation == 'bootstrapping' or cross_validation == 'bootstrap':
+            cross_num = 1
+        elif cross_validation == 'leave-p-out':
+            cross_num = 2
+        elif cross_validation == 'leave-one-out':
+            cross_num = 3
+        elif cross_validation == 'monte-carlo' or cross_validation == 'monte-carlo-cross-validation':
+            cross_num = 4
+        
+        dictdict = splitValidation(len(dataset), cross_num, cross_param, counter)
+        train_sampler = SubsetRandomSampler(dictdict.get("train"))
+        val_sampler  = SubsetRandomSampler(dictdict.get("val"))
+        test_sampler = SubsetRandomSampler(dictdict.get("test"))
     train_loader = DataLoader(dataset, batch_size=batch_size,
                               sampler=train_sampler,
                               num_workers=num_workers,
