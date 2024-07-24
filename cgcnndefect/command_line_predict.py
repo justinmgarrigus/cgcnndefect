@@ -48,11 +48,11 @@ parser.add_argument('--csv-ext', default='', type=str,
 
 args = parser.parse_args(sys.argv[1:])
 if os.path.isfile(args.modelpath):
-    print("=> loading model params '{}'".format(args.modelpath))
+    #print("=> loading model params '{}'".format(args.modelpath))
     model_checkpoint = torch.load(args.modelpath,
                                   map_location=lambda storage, loc: storage)
     model_args = argparse.Namespace(**model_checkpoint['args'])
-    print("=> loaded model params '{}'".format(args.modelpath))
+    #print("=> loaded model params '{}'".format(args.modelpath))
 else:
     print("=> no model params found at '{}'".format(args.modelpath))
 
@@ -63,20 +63,20 @@ if model_args.task == 'regression':
 else:
     best_mae_error = 0.
 
-
 def main():
     global args, model_args, best_mae_error
 
     # load data
     if args.CIFdatapath is not None:
-        with open(args.CIFdatapath,'rb') as f:
+        with open(args.CIFdatapath, 'rb') as f:
             dataset = pickle.load(f)
             dataset.csv_ext = args.csv_ext
             dataset.reset_root(args.cifpath)
     else:
-        dataset = CIFData(args.cifpath)
-    #dataset.csv_ext = args.csv_ext
-    #dataset.reload_data()
+        dataset = CIFData(args.cifpath, csv_ext=args.csv_ext)
+
+    # Rest of your code remains unchanged
+
     
 
     collate_fn = collate_pool
@@ -92,7 +92,7 @@ def main():
         global_fea_len = len(structures[7])
     else:
         global_fea_len = 0
-    print("Potential applicable to: ", dataset.all_elems)
+    #print("Potential applicable to: ", dataset.all_elems)
 
     if model_args.model_type == 'cgcnn':
         model = CrystalGraphConvNet(orig_atom_fea_len, nbr_fea_len,
@@ -191,94 +191,85 @@ def validate(val_loader, model, criterion, normalizer, normalizer_Fxyz, test=Fal
     for i, (input, target, target_Fxyz, batch_cif_ids) in enumerate(val_loader):
         with torch.no_grad():
             if args.cuda:
-                # TODO update for CUDA
-                input_var = (Variable(input[0].cuda(non_blocking=True)),
-                             Variable(input[1].cuda(non_blocking=True)),
-                             input[2].cuda(non_blocking=True),
-                             [crys_idx.cuda(non_blocking=True) for crys_idx in input[3]])
+                input_var = (
+                    Variable(input[0].cuda(non_blocking=True)),
+                    Variable(input[1].cuda(non_blocking=True)),
+                    input[2].cuda(non_blocking=True),
+                    [crys_idx.cuda(non_blocking=True) for crys_idx in input[3]],
+                    Variable(input[4].cuda(non_blocking=True)),
+                    Variable(input[5].cuda(non_blocking=True)),
+                    Variable(input[6].cuda(non_blocking=True)),
+                    Variable(input[7].cuda(non_blocking=True)),
+                    Variable(input[8].cuda(non_blocking=True))
+                )
             else:
-                if model_args.model_type == 'cgcnn':
-                    input_var = (Variable(input[0]), # batch_atom_fea
-                                 Variable(input[1]), # batch_nbr_fea
-                                 input[2],           # batch_nbr_fea_idx
-                                 input[3],           # crystal_atom_idx
-                                 input[4],           # MW: batch_atom_type 
-                                 input[5],           # MW: batch_nbr_type
-                                 input[6],           # MW: batch_nbr_dist
-                                 input[7],           # MW: batch_pair_type
-                                 input[8])           # MW: batch_global_fea
-                elif model_args.model_type == 'spooky':
-                    input_var = (Variable(input[0]), # batch_atom_fea
-                                 input[9],           # batch_nbr_fea_idx_all
-                                 input[3],           # crystal_atom_idx
-                                 input[10],          # batch_gs_fea
-                                 input[11],          # batch_gp_fea
-                                 input[12],          # batch_gd_fea
-                             input[8])           # batch_global_fea
+                input_var = (
+                    Variable(input[0]),  # batch_atom_fea
+                    Variable(input[1]),  # batch_nbr_fea
+                    input[2],            # batch_nbr_fea_idx
+                    input[3],            # crystal_atom_idx
+                    input[4],            # batch_atom_type
+                    input[5],            # batch_nbr_type
+                    input[6],            # batch_nbr_dist
+                    input[7],            # batch_pair_type
+                    input[8]             # batch_global_fea
+                )
 
-                if model_args.all_elems != [0]:
-                    crys_rep_ener = model.compute_repulsive_ener(input[3],
-                                                                 input[4],
-                                                                 input[5],
-                                                                 input[6])
-                else:
-                    crys_rep_ener = torch.zeros(target.shape)
+            # Initialize crys_rep_ener to zero tensor
+            crys_rep_ener = torch.zeros(target.shape)
+
+            if model_args.all_elems != [0]:
+                crys_rep_ener = model.compute_repulsive_ener(input[3], input[4], input[5], input[6])
 
         if model_args.task == 'regression':
-            target_normed = normalizer.norm(target-crys_rep_ener)
+            target_normed = normalizer.norm(target - crys_rep_ener)
             target_Fxyz_normed = None
         elif model_args.task == 'Fxyz':
             target_normed = normalizer.norm(target)
-            target_Fxyz=torch.flatten(target_Fxyz,start_dim=0,end_dim=1)
+            target_Fxyz = torch.flatten(target_Fxyz, start_dim=0, end_dim=1)
             target_Fxyz_normed = normalizer_Fxyz.norm(target_Fxyz)
         else:
             target_normed = target.view(-1).long()
             target_Fxyz_normed = None
+
         with torch.no_grad():
             if args.cuda:
                 target_var = Variable(target_normed.cuda(non_blocking=True))
-                # Fxyz TODO for cuda
+                if model_args.task == 'Fxyz':
+                    target_var_Fxyz = Variable(target_Fxyz_normed.cuda(non_blocking=True))
             else:
                 target_var = Variable(target_normed)
-                if model_args.task=='Fxyz':
+                if model_args.task == 'Fxyz':
                     target_var_Fxyz = Variable(target_Fxyz_normed)
 
         # compute output
         output = model(*input_var)
-        #loss = criterion(output, target_var) #<-Fxyz mod
         loss_orig = criterion(output[0], target_var)
-        alpha=1
+        alpha = 1
         if model_args.task == 'Fxyz':
             loss_Fxyz = criterion(output[1], target_var_Fxyz)
-            loss = loss_orig+alpha*loss_Fxyz
+            loss = loss_orig + alpha * loss_Fxyz
         else:
             loss = loss_orig
-        #print(output[0].data.cpu(),
-        #      normalizer.denorm(output[0].data.cpu()),
-        #      crys_rep_ener,
-        #      normalizer.denorm(output[0].data.cpu())+crys_rep_ener)
 
         # measure accuracy and record loss
         if model_args.task == 'regression':
-            #mae_error = mae(normalizer.denorm(output.data.cpu()), target) #<-Fxyz change
-            mae_error = mae(normalizer.denorm(output[0].data.cpu())+crys_rep_ener, target)
+            mae_error = mae(normalizer.denorm(output[0].data.cpu()) + crys_rep_ener, target)
             losses.update(loss.data.cpu().item(), target.size(0))
             mae_errors.update(mae_error, target.size(0))
             if test:
-                #test_pred = normalizer.denorm(output.data.cpu()) #<-Fxyz mod
-                test_pred = normalizer.denorm(output[0].data.cpu())+crys_rep_ener
+                test_pred = normalizer.denorm(output[0].data.cpu()) + crys_rep_ener
                 test_target = target
                 test_preds += test_pred.view(-1).tolist()
                 test_targets += test_target.view(-1).tolist()
                 test_cif_ids += batch_cif_ids
         elif model_args.task == 'Fxyz':
             mae_error = mae(normalizer.denorm(output[0].data.cpu()), target)
-            mae_Fxyz_error = mae(normalizer_Fxyz.denorm(output[1].data.cpu()),
-                                 target_Fxyz)
+            mae_Fxyz_error = mae(normalizer_Fxyz.denorm(output[1].data.cpu()), target_Fxyz)
             losses.update(loss.data.cpu(), target.size(0))
             mae_errors.update(mae_error, target.size(0))
             mae_Fxyz_errors.update(mae_Fxyz_error, target_Fxyz.size(0))
-            if test:                                                            
+            if test:
                 test_pred = normalizer.denorm(output[0].data.cpu())
                 test_target = target
                 test_preds += test_pred.view(-1).tolist()
@@ -289,10 +280,8 @@ def validate(val_loader, model, criterion, normalizer, normalizer_Fxyz, test=Fal
                 test_target_Fxyz = target_Fxyz
                 test_preds_Fxyz.append(test_pred_Fxyz.view(-1).tolist())
                 test_targets_Fxyz.append(test_target_Fxyz.view(-1).tolist())
-
         else:
-            accuracy, precision, recall, fscore, auc_score =\
-                class_eval(output.data.cpu(), target)
+            accuracy, precision, recall, fscore, auc_score = class_eval(output.data.cpu(), target)
             losses.update(loss.data.cpu().item(), target.size(0))
             accuracies.update(accuracy, target.size(0))
             precisions.update(precision, target.size(0))
@@ -317,17 +306,14 @@ def validate(val_loader, model, criterion, normalizer, normalizer_Fxyz, test=Fal
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                       'MAE {mae_errors.val:.3f} ({mae_errors.avg:.3f})'.format(
-                       i, len(val_loader), batch_time=batch_time, loss=losses,
-                       mae_errors=mae_errors))
+                       i, len(val_loader), batch_time=batch_time, loss=losses, mae_errors=mae_errors))
             elif model_args.task == 'Fxyz':
                 print('Test: [{0}/{1}]\t'
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                       'MAE {mae_errors.val:.3f} ({mae_errors.avg:.3f})\t'
-                      'MAE_Fxyz {mae_Fxyz_errors.val:.3f} '
-                      '({mae_Fxyz_errors.avg:.3f})'.format(
-                    i, len(val_loader), batch_time=batch_time, loss=losses,
-                    mae_errors=mae_errors,mae_Fxyz_errors=mae_Fxyz_errors))
+                      'MAE_Fxyz {mae_Fxyz_errors.val:.3f} ({mae_Fxyz_errors.avg:.3f})'.format(
+                       i, len(val_loader), batch_time=batch_time, loss=losses, mae_errors=mae_errors, mae_Fxyz_errors=mae_Fxyz_errors))
             else:
                 print('Test: [{0}/{1}]\t'
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
@@ -337,46 +323,31 @@ def validate(val_loader, model, criterion, normalizer, normalizer_Fxyz, test=Fal
                       'Recall {recall.val:.3f} ({recall.avg:.3f})\t'
                       'F1 {f1.val:.3f} ({f1.avg:.3f})\t'
                       'AUC {auc.val:.3f} ({auc.avg:.3f})'.format(
-                       i, len(val_loader), batch_time=batch_time, loss=losses,
-                       accu=accuracies, prec=precisions, recall=recalls,
-                       f1=fscores, auc=auc_scores))
+                       i, len(val_loader), batch_time=batch_time, loss=losses, accu=accuracies, prec=precisions, recall=recalls, f1=fscores, auc=auc_scores))
 
     if test:
         star_label = '**'
         import csv
-        with open(os.path.join(args.resultdir,'all_results.csv'), 'w') as f:
+        with open(os.path.join(args.resultdir, 'all_results.csv'), 'w') as f:
             writer = csv.writer(f)
-            for cif_id, target, pred in zip(test_cif_ids, test_targets,
-                                            test_preds):
+            for cif_id, target, pred in zip(test_cif_ids, test_targets, test_preds):
                 writer.writerow((cif_id, target, pred))
-        if model_args.task == 'Fxyz':                                                 
-            with open(os.path.join(args.resultdir,'all_results_Fxyz.csv'), 'w') as f:
-                for cif_id, target_Fxyz, pred_Fxyz in zip(test_cif_ids,
-                                                          test_targets_Fxyz,
-                                                          test_preds_Fxyz):
-                    for i,target_F, pred_F in zip(range(len(target_Fxyz)),
-                                                  target_Fxyz,
-                                                  pred_Fxyz):
-                        f.write("%s,%d,%.5f,%.5f\n"%(cif_id,
-                                                   int(np.floor(i/3)),
-                                                   target_F,
-                                                   pred_F))
+        if model_args.task == 'Fxyz':
+            with open(os.path.join(args.resultdir, 'all_results_Fxyz.csv'), 'w') as f:
+                for cif_id, target_Fxyz, pred_Fxyz in zip(test_cif_ids, test_targets_Fxyz, test_preds_Fxyz):
+                    for i, target_F, pred_F in zip(range(len(target_Fxyz)), target_Fxyz, pred_Fxyz):
+                        f.write("%s,%d,%.5f,%.5f\n" % (cif_id, int(np.floor(i / 3)), target_F, pred_F))
     else:
         star_label = '*'
     if model_args.task == 'regression':
-        print(' {star} MAE {mae_errors.avg:.3f}'.format(star=star_label,
-                                                        mae_errors=mae_errors))
+        print(' {star} MAE {mae_errors.avg:.3f}'.format(star=star_label, mae_errors=mae_errors))
         return mae_errors.avg
     elif model_args.task == 'Fxyz':
-        print(' {star} MAE {mae_errors.avg:.3f} '
-              'MAE_Fxyz {mae_Fxyz_errors.avg:.3f}'.format(
-                    star=star_label,
-                    mae_errors=mae_errors,
-                    mae_Fxyz_errors=mae_Fxyz_errors))
-        return mae_errors.avg+mae_Fxyz_errors.avg
+        print(' {star} MAE {mae_errors.avg:.3f} MAE_Fxyz {mae_Fxyz_errors.avg:.3f}'.format(
+            star=star_label, mae_errors=mae_errors, mae_Fxyz_errors=mae_Fxyz_errors))
+        return mae_errors.avg + mae_Fxyz_errors.avg
     else:
-        print(' {star} AUC {auc.avg:.3f}'.format(star=star_label,
-                                                 auc=auc_scores))
+        print(' {star} AUC {auc.avg:.3f}'.format(star=star_label, auc=auc_scores))
         return auc_scores.avg
 
 

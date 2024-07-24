@@ -54,6 +54,8 @@ parser.add_argument('--print-freq', '-p', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
+parser.add_argument('--pretrain', default='', type=str, metavar='PATH', 
+                    help='path to pretrained model (default: none)')
 parser.add_argument('--all-elems', nargs='*', type=int, default=[0],
                     help='If training an IAP, a priori enter all possible atom'+
                          'types that can be encountered in the potential')
@@ -87,6 +89,11 @@ parser.add_argument('--n-conv', default=3, type=int, metavar='N',
                     help='number of conv layers')
 parser.add_argument('--n-h', default=1, type=int, metavar='N',
                     help='number of hidden layers after pooling')
+parser.add_argument('--freeze-embedding', action='store_true', help='Freeze the embedding layer')
+parser.add_argument('--freeze-conv', action='store_true', help='Freeze the convolutional layer')
+parser.add_argument('--freeze-fc', type=int, default=0, help='Number of fully-connected layers frozen')
+parser.add_argument('--fine-tune', action='store_true', help='Perform additional fine-tuning after initial transfer learning')
+parser.add_argument('--start-fine-tuning-epoch', type=int, default=30, help='Epoch to start fine-tuning')
 parser.add_argument("--seed", default=0,type=int,
                     help='pytorch seed')
 parser.add_argument('--cross-validation', default = None, type = str, metavar = 'N', 
@@ -143,7 +150,6 @@ def main():
     # load data
     print(args.task)
     #torch.multiprocessing.set_sharing_strategy('file_system')
-    print(args.task=='Fxyz')
     dataset = CIFData(*args.data_options,
                       args.task=='Fxyz',            # MW: to remove
                       args.all_elems,               # MW: needed for computing ZBL
@@ -245,6 +251,20 @@ def main():
     if args.cuda:
         model.cuda()
 
+    if args.freeze_embedding:
+        for param in model.embedding.parameters():
+            param.requires_grad = False
+
+    if args.freeze_conv:
+        for conv_layer in model.convs:
+            for param in conv_layer.parameters():
+                param.requires_grad = False
+
+    if args.freeze_fc > 0 and hasattr(model, 'fcs'):
+        for i in range(args.freeze_fc):
+            for param in model.fcs[i].parameters():
+                param.requires_grad = False
+
     # define loss func and optimizer
     if args.task == 'classification':
         criterion = nn.NLLLoss()
@@ -261,22 +281,61 @@ def main():
         raise NameError('Only SGD or Adam is allowed as --optim')
 
     # optionally resume from a checkpoint
-    if args.resume:
-        if os.path.isfile(args.resume):
-            print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
-            best_mae_error = checkpoint['best_mae_error']
+    if path := args.resume or args.pretrain: 
+        if os.path.isfile(path):
+            print("=> loading checkpoint '{}'".format(path))
+            checkpoint = torch.load(path, map_location=torch.device('cpu'))
+
+            # Before we load a checkpoint, we should make sure its parameters 
+            # are the same as the model parameters we created above. 
+            model_args = argparse.Namespace(**checkpoint['args'])
+            def assert_same_params(arg): 
+                model_arg = vars(model_args)[arg] 
+                this_arg = vars(args)[arg]
+                if model_arg != this_arg: 
+                    print(f'Error: the model argument {arg} loaded from the ' \
+                          f'checkpoint has a value of {model_arg} when the ' \
+                          f'command arguments say it should have a value of ' \
+                          f'{this_arg}. This means the checkpoint model and ' \
+                           'model we are constructing in this program have ' \
+                           'different sizes, which is not allowed.') 
+                    sys.exit(1) 
+
+            assert_same_params('atom_fea_len')
+            assert_same_params('n_conv')
+            assert_same_params('h_fea_len')
+            assert_same_params('n_h') 
+
+            model.load_state_dict(checkpoint['state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            normalizer.load_state_dict(checkpoint['normalizer'])
+
+            if args.resume: 
+                args.start_epoch = checkpoint['epoch']
+                best_mae_error = checkpoint['best_mae_error']
+            else: 
+                for param in model.parameters(): 
+                    param.requires_grad = True 
+                for param in model.embedding.parameters(): 
+                    param.requires_grad = False 
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
             normalizer.load_state_dict(checkpoint['normalizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
+                  .format(path, checkpoint['epoch']))
+            param_sum = sum(torch.sum(tensor) for tensor in model.parameters()).item() 
+            print("Sum of each parameter:", param_sum)
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     scheduler = MultiStepLR(optimizer, milestones=args.lr_milestones,
                             gamma=0.1)
+    if args.start_epoch > args.epochs: 
+        print(f'Error: the checkpoint epochs ({checkpoint["epoch"]}) '\
+              f'exceeds the parameter number of epochs ' \
+              f'({args.epochs}), which is not allowed.')
+        sys.exit(1)
+
     #scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, 
     #                                              base_lr=args.lr, 
     #                                              max_lr=args.lr*5,
@@ -478,6 +537,9 @@ def train(train_loader, model, criterion, optimizer, epoch,
         #    if param.requires_grad:
         #        if name == 'r12coeffs':
         #            print(name, param.data, param.grad)
+        if args.fine_tune and epoch >= args.start_fine_tuning_epoch:
+            for param in model.parameters():
+                param.requires_grad = True
 
         optimizer.step()
 

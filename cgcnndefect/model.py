@@ -1,5 +1,5 @@
 from __future__ import print_function, division
-
+import random
 import torch
 import torch.nn as nn
 import itertools
@@ -98,7 +98,7 @@ class CrystalGraphConvNet(nn.Module):
     def __init__(self, orig_atom_fea_len, nbr_fea_len,
                  atom_fea_len=64, n_conv=3, h_fea_len=128, n_h=1,
                  classification=False, Fxyz=False, all_elems=[0],
-                 global_fea_len=0):
+                 global_fea_len=0, new_output_dim=1):
         """
         Initialize CrystalGraphConvNet.
 
@@ -117,33 +117,30 @@ class CrystalGraphConvNet(nn.Module):
           Number of hidden features after pooling
         n_h: int
           Number of hidden layers after pooling
-        
-
+        classification: bool
+          If true, perform classification instead of regression
         Fxyz : bool
           Include forces as an additional training target
+        new_output_dim: int
+          Dimension of the new output layer
         """
         super(CrystalGraphConvNet, self).__init__()
-        # MW added - due to some torchscripting issues, provide the ability
-        # to featurize via model's attributes
         self.dataset1 = CIFDataFeaturizer("name")
 
         self.classification = classification
         self.Fxyz = Fxyz
         self.embedding = nn.Linear(orig_atom_fea_len, atom_fea_len)
         self.convs = nn.ModuleList([ConvLayer(atom_fea_len=atom_fea_len,
-                                    nbr_fea_len=nbr_fea_len)
+                                              nbr_fea_len=nbr_fea_len)
                                     for _ in range(n_conv)])
-        self.conv_to_fc = nn.Linear(atom_fea_len+global_fea_len, h_fea_len)
+        self.conv_to_fc = nn.Linear(atom_fea_len + global_fea_len, h_fea_len)
         self.conv_to_fc_softplus = nn.Softplus()
         if n_h > 1:
             self.fcs = nn.ModuleList([nn.Linear(h_fea_len, h_fea_len)
-                                      for _ in range(n_h-1)])
+                                      for _ in range(n_h - 1)])
             self.softpluses = nn.ModuleList([nn.Softplus()
-                                             for _ in range(n_h-1)])
-        if self.classification:
-            self.fc_out = nn.Linear(h_fea_len, 2)
-        else:
-            self.fc_out = nn.Linear(h_fea_len, 1)
+                                             for _ in range(n_h - 1)])
+        self.fc_out = nn.Linear(h_fea_len, new_output_dim)
         if self.classification:
             self.logsoftmax = nn.LogSoftmax(dim=1)
             self.dropout = nn.Dropout()
@@ -151,42 +148,35 @@ class CrystalGraphConvNet(nn.Module):
             self.logsoftmax = None
             self.dropout = None
 
-        # MW added - split the network after the convolutions to provide Fxyz 
-        # outputs as well
         if self.Fxyz:
             if n_h > 1:
                 self.Fxyz_fcs = nn.ModuleList([nn.Linear(atom_fea_len, 
                                                          atom_fea_len)
-                                               for _ in range(n_h-1)])
+                                               for _ in range(n_h - 1)])
                 self.Fxyz_softpluses = nn.ModuleList([nn.Softplus()
-                                                 for _ in range(n_h-1)])
-            self.conv_to_fc_F = nn.Linear(atom_fea_len,atom_fea_len)
-            self.fc_F_out = nn.Linear(atom_fea_len,3)
+                                                     for _ in range(n_h - 1)])
+            self.conv_to_fc_F = nn.Linear(atom_fea_len, atom_fea_len)
+            self.fc_F_out = nn.Linear(atom_fea_len, 3)
         else:
             self.Fxyz_fcs = None
             self.Fxyz_softpluses = None
             self.conv_to_fc_F = None
             self.fc_F_out = None
 
-    def forward(self, atom_fea : torch.Tensor, 
-                      nbr_fea : torch.Tensor, 
-                      nbr_fea_idx : torch.Tensor, 
-                      crystal_atom_idx : List[torch.Tensor],
-                      atom_type : torch.Tensor, 
-                      nbr_type : torch.Tensor, 
-                      nbr_dist : torch.Tensor, 
-                      pair_type : torch.Tensor,
-                      global_fea : torch.Tensor) -> List[torch.Tensor]:
+    def forward(self, atom_fea: torch.Tensor, 
+                      nbr_fea: torch.Tensor, 
+                      nbr_fea_idx: torch.Tensor, 
+                      crystal_atom_idx: List[torch.Tensor],
+                      atom_type: torch.Tensor, 
+                      nbr_type: torch.Tensor, 
+                      nbr_dist: torch.Tensor, 
+                      pair_type: torch.Tensor,
+                      global_fea: torch.Tensor) -> List[torch.Tensor]:
         """
         Forward pass
 
-        N: Total number of atoms in the batch
-        M: Max number of neighbors
-        N0: Total number of crystals in the batch
-
         Parameters
         ----------
-
         atom_fea: Variable(torch.Tensor) shape (N, orig_atom_fea_len)
           Atom features from atom type
         nbr_fea: Variable(torch.Tensor) shape (N, M, nbr_fea_len)
@@ -194,113 +184,31 @@ class CrystalGraphConvNet(nn.Module):
         nbr_fea_idx: torch.LongTensor shape (N, M)
           Indices of M neighbors of each atom
         crystal_atom_idx: list of torch.LongTensor of length N0
-          len([torch.LongTensor shape (N) , ... ]) == N0
           Mapping from the crystal idx to atom idx in the batch
-          e.g. [ LongTensor([0,1]), LongTensor([2,3]), .... ]
-
         Returns
         -------
-
         prediction: nn.Variable shape (N, )
-          Atom hidden features after convolution ???
-
+          Atom hidden features after convolution
         """
         atom_fea = self.embedding(atom_fea)
-        #print(atom_fea.shape, "<- embedded atom_fea")
-        # >>> torch.Size([N,atom_fea_len])
-
         for conv_func in self.convs:
             atom_fea = conv_func(atom_fea, nbr_fea, nbr_fea_idx)
-        #print(atom_fea.shape, "<- atom_fea post conv")
-        # >>> torch.Size([N,atom_fea_len])
-
         if self.Fxyz:
             pass
-            #crys_Fxyz_out = self.conv_to_fc_F(self.conv_to_fc_softplus(\
-            #                                                        atom_fea))
-            #crys_Fxyz_out = self.fc_F_out(self.conv_to_fc_softplus(
-            #                                                   crys_Fxyz_out))
-        #print(crys_Fxyz_out.shape, "<- forces return shape")
         crys_fea = self.pooling(atom_fea, crystal_atom_idx)
-        #print(crys_fea.shape, " <- crys_fea post pooling")
-        # >>> torch.Size([N0, atom_fea_len])
-
-        crys_fea = self.conv_to_fc(\
-                    self.conv_to_fc_softplus(torch.cat([crys_fea,global_fea],dim=1))
-                   )
-        #print(crys_fea.shape, "<- crys_fea conv_to_fc")
-        # >>> torch.Size([N0, h_fea_len])
-
+        crys_fea = self.conv_to_fc(
+            self.conv_to_fc_softplus(torch.cat([crys_fea, global_fea], dim=1))
+        )
         crys_fea = self.conv_to_fc_softplus(crys_fea)
-        #print(crys_fea.shape, "<- activation")
-        # >>> torch.Size([N0, h_fea_len])
-
-        if self.classification:
-            pass
-            #crys_fea = self.dropout(crys_fea)
         if hasattr(self, 'fcs') and hasattr(self, 'softpluses'):
             for fc, softplus in zip(self.fcs, self.softpluses):
                 crys_fea = softplus(fc(crys_fea))
         out = self.fc_out(crys_fea)
         if self.classification:
             pass
-            #out = self.logsoftmax(out)
-        #print(out.shape, "<- out shape")
-        # >>> torch.Size([N0, 1])
-
-
-
-        # Option 1: Introduce a pair_type, physics-based repulsive potential
-        #           requiring a small number of trainable parameter
-        #           separate from the GCNN in the computation graph 
-        # when optimizing repulsive term parameters, the GCNN output is added
-        # to the modeled pairwise repulsive energies to get the total E
-        # will need a 
-        # pair_type : Variable(torch.Tensor) of shape (N,M)
-        #   pair type of each N atoms with their M neighbors 
-        #   so tensor has integers (0,1,...) up to (NumElemTypes multichoose 2)
-        #   e.g. H-H = 0, H-Mg = 1, Mg-Mg = 2
-        #   Note this indexes into the characteristic repulsive term for 
-        #   the pair type, as contained in the self.r12coeffs
-        # nbr_dist : Variable(torch.Tensor) of shape (N,M)
-        #   distances of pairs
-
-        # populate a tensor same size as pair_type with the corresponding 
-        # self.r12coeffs
-        #target = torch.Tensor([[self.r12coeffs[pair_type[i,j]]\
-        #                            for j in range(pair_type.shape[1])]\
-        #                       for i in range(pair_type.shape[0])])
-        #pw_rep_ener = torch.abs(target)/torch.pow(nbr_dist,12)
-        #crys_rep_ener = self.direct_ener_pooling(pw_rep_ener,crystal_atom_idx)
-        #print(self.r12coeffs)
-        #print(crys_rep_ener.shape, "<- repulsive ener of each crys")
-        # >>> torch.Size([N0, 1])
-
-
-        # Option 2: Introduce a pair_type, physics-based repulsive potential
-        #           that does NOT require any fitted parameters
-        # Note if atom_type and nbr_types are populated with 0's
-        # the ZBL energy will evaluate to zero
-        #Zi = torch.unsqueeze(atom_type,dim=1).expand(nbr_type.shape)
-        #assert Zi.shape == nbr_type.shape == nbr_dist.shape
-        #eZBL = energyZBL(Zi,nbr_type,nbr_dist)
-        #crys_rep_ener, crys_size = self.direct_ener_pooling(eZBL,crystal_atom_idx)
-       
-        ## must divide by two for double counting of all pairs, and normalize
-        ## to the per atom total energy 
-        #crys_rep_ener = (crys_rep_ener/2)/\
-        #                 torch.unsqueeze(torch.tensor(crys_size),dim=1)
-
-        #print('Python output: ')
-        #print(out)
-        #print(crys_rep_ener)
-
         if self.Fxyz:
-            #raise NotImplemented("No support for forces yet")
-            #return out, crys_Fxyz_out
-            return [torch.tensor([0]),torch.tensor([0])]
+            return [torch.tensor([0]), torch.tensor([0])]
         else:
-            #return [torch.add(out,crys_rep_ener), torch.tensor([0])]
             return [out]
 
     @torch.jit.export
@@ -380,12 +288,12 @@ class CrystalGraphConvNet(nn.Module):
           Must be a list of tensors since each idx_map is 
             tensor of different size (number of atoms in that crystal)
         """
-        #assert torch.sum(torch.tensor([len(idx_map) for idx_map in\
-        #    crystal_atom_idx])) == atom_fea.data.shape[0]
+        assert torch.sum(torch.tensor([len(idx_map) for idx_map in\
+            crystal_atom_idx])) == atom_fea.data.shape[0]
 
-        # normal pooling
-        #summed_fea = [torch.mean(atom_fea[idx_map], dim=0, keepdim=True)
-        #              for idx_map in crystal_atom_idx]
+        #normal pooling
+#        summed_fea = [torch.mean(atom_fea[idx_map], dim=0, keepdim=True)
+ #                     for idx_map in crystal_atom_idx]
 
         # for defect, we are really only interested with the feature
         # vector of the node that would become the defect
@@ -394,5 +302,20 @@ class CrystalGraphConvNet(nn.Module):
                       for idx_map in crystal_atom_idx]
         #print(summed_fea)
         #summed_fea = [atom_fea[idx_map[0]] for idx_map in crystal_atom_idx]
+
+        #return torch.cat(summed_fea, dim=0)
+        # DropOut Pooling Function 
+
+ #       summed_fea = [atom_fea[idx_map[random.randint(0, len(idx_map)-1)]]  
+
+#              for idx_map in crystal_atom_idx] 
+
+ #       return torch.stack(summed_fea, dim=0) 
+
+        # Max Pooling 
+
+#        summed_fea = [torch.max(atom_fea[idx_map], dim=0, keepdim=True)[0]  
+
+ #             for idx_map in crystal_atom_idx] 
 
         return torch.cat(summed_fea, dim=0)
