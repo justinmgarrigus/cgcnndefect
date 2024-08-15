@@ -2,13 +2,13 @@ Metadata-Version: 2.1
 Name: cgcnndefect
 Version: 0.1
 Summary: Custom cgcnn version with various updates
-Home-page: UNKNOWN
 Author: Matthew Witman
 Author-email: mwitman1@sandia.gov
 License: MIT
-Platform: UNKNOWN
 Requires-Python: >3.6
 License-File: LICENSE
-
-UNKNOWN
-
+Requires-Dist: pymatgen
+Requires-Dist: ase
+Requires-Dist: torch
+Requires-Dist: numpy
+Requires-Dist: scikit-learn
