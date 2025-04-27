@@ -1,0 +1,56 @@
+# generated using pymatgen
+data_LaSbO4
+_symmetry_space_group_name_H-M   'P 1'
+_cell_length_a   5.43916800
+_cell_length_b   5.15875200
+_cell_length_c   13.71859893
+_cell_angle_alpha   90.00000000
+_cell_angle_beta   109.20508760
+_cell_angle_gamma   90.00000000
+_symmetry_Int_Tables_number   1
+_chemical_formula_structural   LaSbO4
+_chemical_formula_sum   'La4 Sb4 O16'
+_cell_volume   363.51184215
+_cell_formula_units_Z   4
+loop_
+ _symmetry_equiv_pos_site_id
+ _symmetry_equiv_pos_as_xyz
+  1  'x, y, z'
+loop_
+ _atom_type_symbol
+ _atom_type_oxidation_number
+  La3+  3.0
+  Sb5+  5.0
+  O2-  -2.0
+loop_
+ _atom_site_type_symbol
+ _atom_site_label
+ _atom_site_symmetry_multiplicity
+ _atom_site_fract_x
+ _atom_site_fract_y
+ _atom_site_fract_z
+ _atom_site_occupancy
+  La3+  La0  1  0.65716900  0.19566000  0.66453700  1
+  La3+  La1  1  0.65716900  0.30434000  0.16453700  1
+  La3+  La2  1  0.34283100  0.80434000  0.33546300  1
+  La3+  La3  1  0.34283100  0.69566000  0.83546300  1
+  Sb5+  Sb4  1  0.91761200  0.24834600  0.93070100  1
+  Sb5+  Sb5  1  0.91761200  0.25165400  0.43070100  1
+  Sb5+  Sb6  1  0.08238800  0.75165400  0.06929900  1
+  Sb5+  Sb7  1  0.08238800  0.74834600  0.56929900  1
+  O2-  O8  1  0.75237100  0.55994800  0.97458600  1
+  O2-  O9  1  0.75237100  0.94005200  0.47458600  1
+  O2-  O10  1  0.24762900  0.44005200  0.02541400  1
+  O2-  O11  1  0.24762900  0.05994800  0.52541400  1
+  O2-  O12  1  0.98799200  0.40078600  0.81172800  1
+  O2-  O13  1  0.98799200  0.09921400  0.31172800  1
+  O2-  O14  1  0.01200800  0.59921400  0.18827200  1
+  O2-  O15  1  0.01200800  0.90078600  0.68827200  1
+  O2-  O16  1  0.13912100  0.92999700  0.94384800  1
+  O2-  O17  1  0.13912100  0.57000300  0.44384800  1
+  O2-  O18  1  0.86087900  0.07000300  0.05615200  1
+  O2-  O19  1  0.86087900  0.42999700  0.55615200  1
+  O2-  O20  1  0.58863700  0.11477700  0.83205600  1
+  O2-  O21  1  0.58863700  0.38522300  0.33205600  1
+  O2-  O22  1  0.41136300  0.88522300  0.16794400  1
+  O2-  O23  1  0.41136300  0.61477700  0.66794400  1

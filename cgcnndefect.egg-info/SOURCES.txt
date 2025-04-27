@@ -9,7 +9,6 @@ cgcnndefect/iap.py
 cgcnndefect/make_cpp_call.py
 cgcnndefect/model.py
 cgcnndefect/model_sph_harmonics.py
-cgcnndefect/optimizer.py
 cgcnndefect/potentials.py
 cgcnndefect/util.py
 cgcnndefect.egg-info/PKG-INFO

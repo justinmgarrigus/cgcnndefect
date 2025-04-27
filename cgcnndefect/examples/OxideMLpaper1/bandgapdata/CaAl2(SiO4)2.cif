@@ -1,0 +1,59 @@
+# generated using pymatgen
+data_CaAl2(SiO4)2
+_symmetry_space_group_name_H-M   'P 1'
+_cell_length_a   5.15216145
+_cell_length_b   5.15216145
+_cell_length_c   14.98965600
+_cell_angle_alpha   90.00000000
+_cell_angle_beta   90.00000000
+_cell_angle_gamma   120.00000000
+_symmetry_Int_Tables_number   1
+_chemical_formula_structural   CaAl2(SiO4)2
+_chemical_formula_sum   'Ca2 Al4 Si4 O16'
+_cell_volume   344.58885320
+_cell_formula_units_Z   2
+loop_
+ _symmetry_equiv_pos_site_id
+ _symmetry_equiv_pos_as_xyz
+  1  'x, y, z'
+loop_
+ _atom_type_symbol
+ _atom_type_oxidation_number
+  Ca2+  2.0
+  Al3+  3.0
+  Si4+  4.0
+  O2-  -2.0
+loop_
+ _atom_site_type_symbol
+ _atom_site_label
+ _atom_site_symmetry_multiplicity
+ _atom_site_fract_x
+ _atom_site_fract_y
+ _atom_site_fract_z
+ _atom_site_occupancy
+  Ca2+  Ca0  1  0.00000000  0.00000000  0.50000000  1
+  Ca2+  Ca1  1  0.00000000  0.00000000  0.00000000  1
+  Al3+  Al2  1  0.33333333  0.66666667  0.35775000  1
+  Al3+  Al3  1  0.66666667  0.33333333  0.64225000  1
+  Al3+  Al4  1  0.33333333  0.66666667  0.85775000  1
+  Al3+  Al5  1  0.66666667  0.33333333  0.14225000  1
+  Si4+  Si6  1  0.66666667  0.33333333  0.36334100  1
+  Si4+  Si7  1  0.33333333  0.66666667  0.63665900  1
+  Si4+  Si8  1  0.66666667  0.33333333  0.86334100  1
+  Si4+  Si9  1  0.33333333  0.66666667  0.13665900  1
+  O2-  O10  1  0.98717200  0.60999400  0.40239300  1
+  O2-  O11  1  0.39000600  0.37717800  0.40239300  1
+  O2-  O12  1  0.62282200  0.01282800  0.40239300  1
+  O2-  O13  1  0.01282800  0.39000600  0.59760700  1
+  O2-  O14  1  0.60999400  0.62282200  0.59760700  1
+  O2-  O15  1  0.37717800  0.98717200  0.59760700  1
+  O2-  O16  1  0.98717200  0.37717800  0.90239300  1
+  O2-  O17  1  0.62282200  0.60999400  0.90239300  1
+  O2-  O18  1  0.39000600  0.01282800  0.90239300  1
+  O2-  O19  1  0.01282800  0.62282200  0.09760700  1
+  O2-  O20  1  0.37717800  0.39000600  0.09760700  1
+  O2-  O21  1  0.60999400  0.98717200  0.09760700  1
+  O2-  O22  1  0.33333333  0.66666667  0.24324400  1
+  O2-  O23  1  0.66666667  0.33333333  0.25675600  1
+  O2-  O24  1  0.66666667  0.33333333  0.75675600  1
+  O2-  O25  1  0.33333333  0.66666667  0.74324400  1

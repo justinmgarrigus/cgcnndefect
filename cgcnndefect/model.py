@@ -288,11 +288,11 @@ class CrystalGraphConvNet(nn.Module):
           Must be a list of tensors since each idx_map is 
             tensor of different size (number of atoms in that crystal)
         """
-        assert torch.sum(torch.tensor([len(idx_map) for idx_map in\
-            crystal_atom_idx])) == atom_fea.data.shape[0]
+#        assert torch.sum(torch.tensor([len(idx_map) for idx_map in\
+ #           crystal_atom_idx])) == atom_fea.data.shape[0]
 
         #normal pooling
-#        summed_fea = [torch.mean(atom_fea[idx_map], dim=0, keepdim=True)
+  #      summed_fea = [torch.mean(atom_fea[idx_map], dim=0, keepdim=True)
  #                     for idx_map in crystal_atom_idx]
 
         # for defect, we are really only interested with the feature

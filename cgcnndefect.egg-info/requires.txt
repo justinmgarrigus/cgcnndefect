@@ -3,3 +3,4 @@ ase
 torch
 numpy
 scikit-learn
+watermark
